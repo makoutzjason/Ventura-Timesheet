@@ -110,12 +110,18 @@ Then open http://localhost:3000 and sign in as the traveler account from step 6.
    `NEXT_PUBLIC_APP_URL` to your real deployed URL, and generate a random
    value for `CRON_SECRET`.
 4. `vercel.json` already defines the reminder cron job — Vercel picks it up
-   automatically on deploy, no extra configuration needed. **It runs
-   hourly** (`0 * * * *`), which the reminder logic requires to correctly
+   automatically on deploy, no extra configuration needed. It's meant to run
+   **hourly** (`0 * * * *`), which the reminder logic requires to correctly
    evaluate "is it currently 8am/2pm/etc. in this facility's own time zone"
    for every facility, not just one global trigger time — see
    src/app/api/cron/reminders/route.ts. Hourly cron execution needs a Vercel
-   **Pro** plan; the Hobby plan only allows a couple of fixed times a day,
-   which isn't frequent enough for this to fire at the right facility-local
-   hours. Upgrade before relying on this in production, or revisit the cron
-   frequency/design if you'd rather stay on Hobby.
+   **Pro** plan; the Hobby plan only allows a couple of fixed times a day.
+
+   **Currently set to once daily instead** (`0 14 * * *`) so it can deploy
+   on Hobby — this is a temporary, deliberately degraded state, not the
+   intended cadence. With only one trigger a day, most of the scheduled
+   reminder stages (see src/lib/reminder-schedule.ts) simply won't fire;
+   only whichever single stage happens to coincide with that one daily UTC
+   hour does. Once you upgrade to Pro, change `vercel.json`'s schedule back
+   to `"0 * * * *"` and redeploy — see the comment at the top of
+   src/app/api/cron/reminders/route.ts for the full picture.

@@ -11,15 +11,24 @@ import {
   logReminderSent,
 } from "@/lib/reminders";
 
-// REQUIRES HOURLY EXECUTION. Reminder times (see src/lib/reminder-schedule.ts)
-// are evaluated in each *facility's own* local time zone, not server/UTC
-// time — a single global trigger can't correctly hit "8am in every zone a
-// facility might be in," so this has to run frequently enough to check, for
-// every facility, "is one of its slots due this hour." vercel.json sets
-// this to "0 * * * *". Hourly Vercel Cron execution needs a Pro plan
-// (Hobby only allows a couple of fixed times/day) — that's a deploy/billing
-// decision for later, not something this code assumes or depends on beyond
-// needing to actually be invoked hourly to behave as designed.
+// REQUIRES HOURLY EXECUTION TO BEHAVE AS DESIGNED. Reminder times (see
+// src/lib/reminder-schedule.ts) are evaluated in each *facility's own*
+// local time zone, not server/UTC time — a single global trigger can't
+// correctly hit "8am in every zone a facility might be in," so this needs
+// to run every hour to check, for every facility, "is one of its slots due
+// this hour."
+//
+// TEMPORARY: vercel.json currently runs this on "0 14 * * *" (once daily,
+// 14:00 UTC = 8am America/Denver) instead of hourly, because Vercel's
+// Hobby plan doesn't allow hourly cron and this was deployed before
+// upgrading to Pro. 14:00 UTC was picked because it coincides with the
+// real mon_8am/tue_8am slots in both schedules — but every other slot
+// (tue_2pm, wed_7am, sat_6pm, sun_6pm) will now silently never fire, and
+// even mon_8am/tue_8am only fire for facilities actually on America/Denver
+// (a different facility timezone would miss 14:00 UTC entirely). This is a
+// real reduction in reminder coverage, not just "slower" — restore
+// vercel.json to "0 * * * *" once on Pro, and this comment can shrink back
+// down to just documenting the hourly requirement.
 //
 // Two independent tracks, because "submitted, waiting on a manager" and
 // "never submitted at all" are different problems:
