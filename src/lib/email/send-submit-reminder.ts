@@ -18,7 +18,11 @@ export async function sendSubmitReminderEmail({
   const from = process.env.EMAIL_FROM || "Ventura Timesheets <onboarding@resend.dev>";
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-  return client.emails.send({
+  // See the comment in send-approval-request.ts — Resend's SDK resolves
+  // normally with an `error` field on an API-level rejection instead of
+  // throwing, so this has to be turned into a real throw for callers'
+  // try/catch to actually detect a failed send.
+  const { error } = await client.emails.send({
     from,
     to,
     subject: `Reminder: submit your timesheet — ${weekLabel}`,
@@ -28,4 +32,5 @@ export async function sendSubmitReminderEmail({
       <p><a href="${appUrl}/timesheets/new">Sign in to submit it</a>.</p>
     `,
   });
+  if (error) throw new Error(error.message);
 }

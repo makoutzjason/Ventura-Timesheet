@@ -25,7 +25,13 @@ export async function sendApprovalRequestEmail({
   // receive mail from it in practice, only your own Resend account address.
   const from = process.env.EMAIL_FROM || "Ventura Timesheets <onboarding@resend.dev>";
 
-  return client.emails.send({
+  // Resend's SDK does NOT throw on an API-level rejection (bad key, sandbox
+  // restriction, etc.) — it resolves normally with an `error` field set. Every
+  // caller of this function relies on try/catch to detect a failed send, so
+  // that has to be turned into a real throw here or those failures silently
+  // vanish (this is exactly what happened before this check existed: sends
+  // were logged as successful with zero indication anything was wrong).
+  const { error } = await client.emails.send({
     from,
     to,
     subject: `Timesheet approval needed: ${travelerName} — ${weekLabel}`,
@@ -36,4 +42,5 @@ export async function sendApprovalRequestEmail({
       <p style="color:#666;font-size:13px">This link is single-use and expires in 7 days.</p>
     `,
   });
+  if (error) throw new Error(error.message);
 }

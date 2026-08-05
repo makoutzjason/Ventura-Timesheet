@@ -23,7 +23,11 @@ export async function sendTravelerMissingNoticeEmail({
 
   const from = process.env.EMAIL_FROM || "Ventura Timesheets <onboarding@resend.dev>";
 
-  return client.emails.send({
+  // See the comment in send-approval-request.ts — Resend's SDK resolves
+  // normally with an `error` field on an API-level rejection instead of
+  // throwing, so this has to be turned into a real throw for callers'
+  // try/catch to actually detect a failed send.
+  const { error } = await client.emails.send({
     from,
     to,
     subject: `${travelerName} hasn't submitted a timesheet yet — ${weekLabel}`,
@@ -32,4 +36,5 @@ export async function sendTravelerMissingNoticeEmail({
       <p><strong>${travelerName}</strong> hasn't submitted a timesheet for <strong>${weekLabel}</strong> at ${facilityName} yet. They've been reminded — a nudge from you may help too.</p>
     `,
   });
+  if (error) throw new Error(error.message);
 }
