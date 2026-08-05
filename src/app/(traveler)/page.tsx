@@ -56,7 +56,15 @@ export default async function TravelerHomePage() {
 
   const status = timesheet?.status ?? null;
   const ctaLabel = !status ? "Start this week's timesheet" : isEditableStatus(status) ? "Continue" : "View";
-  const ctaHref = !status || isEditableStatus(status) ? "/timesheets/new" : `/timesheets/${timesheet!.id}`;
+  // timesheet here is already this week's row (or none), so this is never
+  // ambiguous the way a list of every week would be — but passing the id
+  // explicitly when one exists keeps this consistent with the "Your
+  // timesheets" list, which has to pass it for correctness (see that page).
+  const ctaHref = !status
+    ? "/timesheets/new"
+    : isEditableStatus(status)
+      ? `/timesheets/new?timesheetId=${timesheet!.id}`
+      : `/timesheets/${timesheet!.id}`;
 
   return (
     <div className="space-y-4">

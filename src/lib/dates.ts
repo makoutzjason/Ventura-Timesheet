@@ -43,13 +43,20 @@ export function getCurrentWeekRange(weekStartDay: number, timeZone: string, refe
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
 
-  const days = Array.from({ length: 7 }, (_, i) => {
+  return { weekStart, weekEnd, days: daysInRange(weekStart) };
+}
+
+// The 7 consecutive calendar days starting at weekStart. Factored out of
+// getCurrentWeekRange so a caller that already has a specific stored
+// week_start_date (e.g. re-opening a specific flagged timesheet from a past
+// week, rather than "whatever week it is right now") can build the same
+// day list without going through "now" at all.
+export function daysInRange(weekStart: Date) {
+  return Array.from({ length: 7 }, (_, i) => {
     const day = new Date(weekStart);
     day.setDate(weekStart.getDate() + i);
     return day;
   });
-
-  return { weekStart, weekEnd, days };
 }
 
 // Local weekday (0=Sunday..6=Saturday, matching Date.getDay()) and hour

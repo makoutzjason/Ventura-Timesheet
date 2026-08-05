@@ -32,7 +32,11 @@ export default async function TimesheetsPage() {
         {timesheets?.map((timesheet) => (
           <Link
             key={timesheet.id}
-            href={isEditableStatus(timesheet.status) ? "/timesheets/new" : `/timesheets/${timesheet.id}`}
+            href={
+              isEditableStatus(timesheet.status)
+                ? `/timesheets/new?timesheetId=${timesheet.id}`
+                : `/timesheets/${timesheet.id}`
+            }
             className="block rounded-lg border border-zinc-200 bg-white p-3"
           >
             <p className="text-sm font-medium text-zinc-900">

@@ -1,11 +1,16 @@
-import { redirect } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentWeekRange, formatDateOnly } from "@/lib/dates";
+import { getCurrentWeekRange, formatDateOnly, parseDateOnly, daysInRange } from "@/lib/dates";
 import { isEditableStatus } from "@/lib/timesheets";
 import { TimesheetForm } from "./timesheet-form";
 
-export default async function NewTimesheetPage() {
+export default async function NewTimesheetPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ timesheetId?: string }>;
+}) {
+  const { timesheetId: requestedTimesheetId } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -32,28 +37,92 @@ export default async function NewTimesheetPage() {
     );
   }
 
-  const facility = traveler.facilities as unknown as {
+  const currentFacility = traveler.facilities as unknown as {
     name: string;
     week_start_day: number;
     time_zone: string;
     skip_manager_approval: boolean;
   };
 
-  const { weekStart, weekEnd, days } = getCurrentWeekRange(facility.week_start_day, facility.time_zone);
-  const weekStartDate = formatDateOnly(weekStart);
-  const weekEndDate = formatDateOnly(weekEnd);
+  let weekStartDate: string;
+  let weekEndDate: string;
+  let days: Date[];
+  let timesheet: {
+    id: string;
+    status: string;
+    flag_reason: string | null;
+    guaranteed_hours_note: string | null;
+  } | null;
+  // Display/behavior for whichever facility this timesheet actually belongs
+  // to — see the branch below for why that isn't always traveler.facilities.
+  let facilityName: string;
+  let facilitySkipManagerApproval: boolean;
+  let facilityIdForForm: string;
 
-  const { data: timesheet } = await supabase
-    .from("timesheets")
-    .select("id, status, flag_reason, guaranteed_hours_note")
-    .eq("traveler_id", user.id)
-    .eq("week_start_date", weekStartDate)
-    .maybeSingle();
+  if (requestedTimesheetId) {
+    // Opening a *specific* timesheet to correct — e.g. a flagged one from a
+    // past week, from the "Your timesheets" list. This has to be anchored
+    // to that timesheet's own stored week_start_date/week_end_date, not
+    // "today" — the code below this branch assumes "the current week's
+    // timesheet," which silently resolves to the wrong one whenever the
+    // requested timesheet isn't from the current week (the bug this branch
+    // fixes: clicking an old flagged row landed on this week's submission
+    // instead, since that's what week-less "/timesheets/new" always means).
+    const { data: requested } = await supabase
+      .from("timesheets")
+      .select(
+        "id, status, week_start_date, week_end_date, flag_reason, guaranteed_hours_note, facility_id, facilities(name, skip_manager_approval)",
+      )
+      .eq("id", requestedTimesheetId)
+      .eq("traveler_id", user.id)
+      .maybeSingle();
 
-  // Already past the traveler's control (with a manager, admin, or paid) —
-  // send them to the read-only detail view instead of an edit form.
-  if (timesheet && !isEditableStatus(timesheet.status)) {
-    redirect(`/timesheets/${timesheet.id}`);
+    if (!requested) notFound();
+    // Not editable (approved/paid/etc.) — same redirect the current-week
+    // path below does for the same reason.
+    if (!isEditableStatus(requested.status)) {
+      redirect(`/timesheets/${requested.id}`);
+    }
+
+    weekStartDate = requested.week_start_date;
+    weekEndDate = requested.week_end_date;
+    days = daysInRange(parseDateOnly(weekStartDate));
+    timesheet = requested;
+
+    // The timesheet's own facility_id — a snapshot taken at submission time
+    // (see 0001_init.sql) — not the traveler's current assignment, so
+    // correcting an old timesheet doesn't silently apply today's facility
+    // rules to a week worked somewhere else.
+    const requestedFacility = requested.facilities as unknown as { name: string; skip_manager_approval: boolean } | null;
+    facilityName = requestedFacility?.name ?? currentFacility.name;
+    facilitySkipManagerApproval = requestedFacility?.skip_manager_approval ?? currentFacility.skip_manager_approval;
+    facilityIdForForm = requested.facility_id;
+  } else {
+    const { weekStart, weekEnd, days: currentWeekDays } = getCurrentWeekRange(
+      currentFacility.week_start_day,
+      currentFacility.time_zone,
+    );
+    weekStartDate = formatDateOnly(weekStart);
+    weekEndDate = formatDateOnly(weekEnd);
+    days = currentWeekDays;
+    facilityName = currentFacility.name;
+    facilitySkipManagerApproval = currentFacility.skip_manager_approval;
+    facilityIdForForm = traveler.facility_id;
+
+    const { data: currentWeekTimesheet } = await supabase
+      .from("timesheets")
+      .select("id, status, flag_reason, guaranteed_hours_note")
+      .eq("traveler_id", user.id)
+      .eq("week_start_date", weekStartDate)
+      .maybeSingle();
+
+    // Already past the traveler's control (with a manager, admin, or paid) —
+    // send them to the read-only detail view instead of an edit form.
+    if (currentWeekTimesheet && !isEditableStatus(currentWeekTimesheet.status)) {
+      redirect(`/timesheets/${currentWeekTimesheet.id}`);
+    }
+
+    timesheet = currentWeekTimesheet;
   }
 
   const existingEntries = new Map<
@@ -139,7 +208,7 @@ export default async function NewTimesheetPage() {
         <h1 className="text-xl font-semibold text-zinc-900">
           {wasFlagged ? "Correct & resubmit" : "Submit this week"}
         </h1>
-        <p className="text-sm text-zinc-600">{facility.name}</p>
+        <p className="text-sm text-zinc-600">{facilityName}</p>
         {wasFlagged && timesheet?.flag_reason && (
           <p className="mt-2 rounded-md bg-amber-50 p-2 text-sm text-amber-800">{timesheet.flag_reason}</p>
         )}
@@ -153,8 +222,8 @@ export default async function NewTimesheetPage() {
         weekEndDate={weekEndDate}
         timesheetId={timesheet?.id ?? null}
         wasFlagged={wasFlagged}
-        facilityId={traveler.facility_id}
-        skipManagerApproval={facility.skip_manager_approval}
+        facilityId={facilityIdForForm}
+        skipManagerApproval={facilitySkipManagerApproval}
         travelerId={user.id}
         initialPhotos={initialPhotos}
       />
