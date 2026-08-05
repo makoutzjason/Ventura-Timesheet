@@ -63,6 +63,7 @@ export async function sendManagerApprovalReminder(
       approveUrl,
     });
   } catch (error) {
+    console.error("sendManagerApprovalReminder: email send failed", error);
     return { error: `Couldn't send the reminder email: ${error instanceof Error ? error.message : "unknown error"}` };
   }
 
@@ -107,6 +108,7 @@ export async function sendMissingSubmissionReminder(
   try {
     await sendSubmitReminderEmail({ to: travelerEmail, facilityName: missing.facilityName, weekLabel });
   } catch (error) {
+    console.error("sendMissingSubmissionReminder: traveler email send failed", error);
     travelerError = error instanceof Error ? error.message : "unknown error";
   }
 
@@ -123,6 +125,7 @@ export async function sendMissingSubmissionReminder(
           weekLabel,
         });
       } catch (error) {
+        console.error("sendMissingSubmissionReminder: manager notice send failed", error);
         managerError = error instanceof Error ? error.message : "unknown error";
       }
     }
