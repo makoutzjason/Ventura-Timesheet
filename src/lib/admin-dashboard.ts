@@ -162,6 +162,34 @@ export async function getTravelersMissingSubmission(
   return { data: missing, error: null };
 }
 
+// Every active facility's own current week_start_date, keyed by facility id
+// — "current week" is per-facility (week_start_day + time_zone both vary),
+// so anything that needs to test "is this row from the current week"
+// against a facility_id needs this map rather than a single global date.
+// Shared by getDashboardCounts below and the admin timesheets archive
+// (src/app/admin/timesheets/page.tsx), which was duplicating this same
+// facilities-query-plus-getCurrentWeekRange-map pattern before this existed.
+export async function getCurrentWeekStartsByFacility(
+  supabase: SupabaseClient<Database>,
+  referenceDate: Date = new Date(),
+): Promise<{ data: Map<string, string>; error: string | null }> {
+  const { data: facilities, error } = await supabase.from("facilities").select("id, week_start_day, time_zone");
+
+  if (error) {
+    console.error("getCurrentWeekStartsByFacility query failed", error);
+    return { data: new Map(), error: error.message };
+  }
+
+  const map = new Map(
+    facilities.map((facility) => [
+      facility.id as string,
+      formatDateOnly(getCurrentWeekRange(facility.week_start_day, facility.time_zone, referenceDate).weekStart),
+    ]),
+  );
+
+  return { data: map, error: null };
+}
+
 export type DashboardCounts = {
   approvedThisWeek: number;
   paidTotal: number;
@@ -177,21 +205,14 @@ export async function getDashboardCounts(
   supabase: SupabaseClient<Database>,
   referenceDate: Date = new Date(),
 ): Promise<{ data: DashboardCounts; error: string | null }> {
-  const { data: facilities, error: facilitiesError } = await supabase
-    .from("facilities")
-    .select("id, week_start_day, time_zone");
+  const { data: currentWeekStartByFacility, error: facilitiesError } = await getCurrentWeekStartsByFacility(
+    supabase,
+    referenceDate,
+  );
 
   if (facilitiesError) {
-    console.error("getDashboardCounts facilities query failed", facilitiesError);
-    return { data: { approvedThisWeek: 0, paidTotal: 0 }, error: facilitiesError.message };
+    return { data: { approvedThisWeek: 0, paidTotal: 0 }, error: facilitiesError };
   }
-
-  const currentWeekStartByFacility = new Map(
-    facilities.map((facility) => [
-      facility.id as string,
-      formatDateOnly(getCurrentWeekRange(facility.week_start_day, facility.time_zone, referenceDate).weekStart),
-    ]),
-  );
 
   const { data: approved, error: approvedError } = await supabase
     .from("timesheets")

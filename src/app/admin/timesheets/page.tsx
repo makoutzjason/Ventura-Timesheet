@@ -2,14 +2,18 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { parseDateOnly, formatWeekLabel } from "@/lib/dates";
 import { STATUS_LABELS } from "@/lib/timesheets";
-import { getTravelersMissingSubmission } from "@/lib/admin-dashboard";
+import { getTravelersMissingSubmission, getCurrentWeekStartsByFacility } from "@/lib/admin-dashboard";
+import { buildArchiveTree, type ArchiveRow } from "./archive";
+import { ArchiveTree } from "./archive-tree";
 
 const STATUS_FILTERS = [
   { value: "", label: "All" },
   // Not a real timesheets.status value — this tab queries for the absence
   // of a row (see getTravelersMissingSubmission) rather than filtering
   // existing ones, so it's handled as a separate branch below instead of an
-  // .eq("status", ...) like every other tab.
+  // .eq("status", ...) like every other tab. It's also inherently
+  // current-week-only (there's no historical record of "who hadn't
+  // submitted 3 weeks ago"), so it never populates the archive below.
   { value: "not_submitted", label: "Not submitted" },
   { value: "awaiting_manager", label: "Awaiting manager" },
   // "photo_submitted" is the underlying status value (see 0001_init.sql) —
@@ -20,15 +24,6 @@ const STATUS_FILTERS = [
   { value: "paid", label: "Paid" },
 ];
 
-type DisplayRow = {
-  key: string;
-  travelerName: string;
-  travelerHref: string;
-  facilityName: string;
-  weekLabel: string;
-  statusLabel: string;
-};
-
 export default async function AdminTimesheetsPage({
   searchParams,
 }: {
@@ -37,13 +32,15 @@ export default async function AdminTimesheetsPage({
   const { status } = await searchParams;
   const supabase = await createClient();
 
-  let rows: DisplayRow[] = [];
+  let currentWeekRows: ArchiveRow[] = [];
+  let archiveRows: (ArchiveRow & { weekStartDate: string })[] = [];
   let error: string | null = null;
 
   if (status === "not_submitted") {
     const { data: missing, error: missingError } = await getTravelersMissingSubmission(supabase);
     error = missingError;
-    rows = missing.map((traveler) => ({
+    // Always "current week" by definition — see the STATUS_FILTERS comment.
+    currentWeekRows = missing.map((traveler) => ({
       key: `${traveler.travelerId}-${traveler.weekStartDate}`,
       travelerName: traveler.travelerName,
       travelerHref: `/admin/travelers/${traveler.travelerId}`,
@@ -59,7 +56,7 @@ export default async function AdminTimesheetsPage({
     let query = supabase
       .from("timesheets")
       .select(
-        "id, week_start_date, week_end_date, status, submitted_at, travelers(profiles(full_name)), facilities(name)",
+        "id, week_start_date, week_end_date, status, submitted_at, travelers(profiles(full_name)), facilities(id, name)",
       )
       .order("submitted_at", { ascending: false, nullsFirst: false });
 
@@ -67,7 +64,9 @@ export default async function AdminTimesheetsPage({
       query = query.eq("status", status);
     }
 
-    const { data: timesheets, error: queryError } = await query;
+    const [{ data: timesheets, error: queryError }, { data: currentWeekStartByFacility, error: weekStartsError }] =
+      await Promise.all([query, getCurrentWeekStartsByFacility(supabase)]);
+
     if (queryError) {
       // Surfaces real problems (missing grants, a broken RLS policy, etc.)
       // instead of rendering the same "Nothing here." empty state a
@@ -75,12 +74,16 @@ export default async function AdminTimesheetsPage({
       // indistinguishable.
       console.error("AdminTimesheetsPage query failed", queryError);
       error = queryError.message;
+    } else if (weekStartsError) {
+      console.error("AdminTimesheetsPage week-starts query failed", weekStartsError);
+      error = weekStartsError;
     }
 
-    rows = (timesheets ?? []).map((timesheet) => {
+    for (const timesheet of timesheets ?? []) {
       const traveler = timesheet.travelers as unknown as { profiles: { full_name: string } | null } | null;
-      const facility = timesheet.facilities as unknown as { name: string } | null;
-      return {
+      const facility = timesheet.facilities as unknown as { id: string; name: string } | null;
+
+      const row: ArchiveRow = {
         key: timesheet.id,
         travelerName: traveler?.profiles?.full_name ?? "—",
         travelerHref: `/timesheets/${timesheet.id}`,
@@ -88,11 +91,24 @@ export default async function AdminTimesheetsPage({
         weekLabel: formatWeekLabel(parseDateOnly(timesheet.week_start_date), parseDateOnly(timesheet.week_end_date)),
         statusLabel: STATUS_LABELS[timesheet.status] ?? timesheet.status,
       };
-    });
+
+      // "Current week" is per-facility (week_start_day/time_zone both
+      // vary) — a row only belongs up top if its week_start_date matches
+      // *its own facility's* current week right now, not one global range.
+      const isCurrentWeek = facility && currentWeekStartByFacility.get(facility.id) === timesheet.week_start_date;
+
+      if (isCurrentWeek) {
+        currentWeekRows.push(row);
+      } else {
+        archiveRows.push({ ...row, weekStartDate: timesheet.week_start_date });
+      }
+    }
   }
 
+  const archiveTree = buildArchiveTree(archiveRows);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <h1 className="text-xl font-semibold text-zinc-900">Timesheets</h1>
 
       <div className="flex flex-wrap gap-2">
@@ -122,7 +138,7 @@ export default async function AdminTimesheetsPage({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {currentWeekRows.map((row) => (
               <tr key={row.key} className="border-t border-zinc-100">
                 <td className="px-4 py-2">
                   <Link href={row.travelerHref} className="font-medium text-zinc-900 underline">
@@ -141,7 +157,7 @@ export default async function AdminTimesheetsPage({
                 </td>
               </tr>
             )}
-            {!error && rows.length === 0 && (
+            {!error && currentWeekRows.length === 0 && (
               <tr>
                 <td colSpan={4} className="px-4 py-6 text-center text-zinc-500">
                   Nothing here.
@@ -151,6 +167,13 @@ export default async function AdminTimesheetsPage({
           </tbody>
         </table>
       </div>
+
+      {status !== "not_submitted" && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-zinc-900">Archive</h2>
+          <ArchiveTree years={archiveTree} />
+        </section>
+      )}
     </div>
   );
 }
