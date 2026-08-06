@@ -1,7 +1,13 @@
 import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { SHORT_HOURS_REASON_LABELS, calculateRegularHours, calculateOnCallHours, calculateCallBackHours } from "@/lib/timesheets";
+import {
+  SHORT_HOURS_REASON_LABELS,
+  GUARANTEED_HOURS_REASON_LABELS,
+  calculateRegularHours,
+  calculateOnCallHours,
+  calculateCallBackHours,
+} from "@/lib/timesheets";
 
 // Read into a buffer rather than handing react-pdf a path string — its
 // path-vs-URL sniffing is unreliable with Windows-style paths, and a buffer
@@ -33,6 +39,8 @@ export type TimesheetPdfData = {
   recruiterName: string | null;
   weekStartDate: string;
   weekEndDate: string;
+  guaranteedHours: number | null;
+  guaranteedHoursReason: string | null;
   guaranteedHoursNote: string | null;
   entries: TimesheetPdfEntry[];
   employeeSignature: { name: string; timestamp: string } | null;
@@ -204,7 +212,13 @@ export function TimesheetPdf({ data }: { data: TimesheetPdfData }) {
 
         <View style={styles.totalsRow}>
           <Text style={styles.totalsNote}>
-            Explain if guaranteed hours are not met: {data.guaranteedHoursNote ?? ""}
+            {data.guaranteedHours !== null
+              ? `Guaranteed hours: ${data.guaranteedHours} · Worked (incl. call-back): ${(totalRegularHours + totalCallBackHours).toFixed(2)} · Reason: ${
+                  data.guaranteedHoursReason
+                    ? GUARANTEED_HOURS_REASON_LABELS[data.guaranteedHoursReason] ?? data.guaranteedHoursReason
+                    : "—"
+                }${data.guaranteedHoursNote ? ` · ${data.guaranteedHoursNote}` : ""}`
+              : (data.guaranteedHoursNote ?? "")}
           </Text>
           <View style={styles.totalsBox}>
             <Text style={styles.totalsLabel}>TOTAL HOURS FOR WEEK</Text>

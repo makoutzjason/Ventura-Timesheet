@@ -18,7 +18,7 @@ export async function GET(
   const { data: timesheet } = await supabase
     .from("timesheets")
     .select(
-      "id, status, week_start_date, week_end_date, guaranteed_hours_note, submitted_at, traveler_id, facilities(name)",
+      "id, status, week_start_date, week_end_date, guaranteed_hours, guaranteed_hours_reason, guaranteed_hours_note, submitted_at, traveler_id, facilities(name)",
     )
     .eq("id", timesheetId)
     .maybeSingle();
@@ -73,6 +73,8 @@ export async function GET(
     recruiterName: travelerRow?.recruiter_name ?? null,
     weekStartDate: timesheet.week_start_date,
     weekEndDate: timesheet.week_end_date,
+    guaranteedHours: timesheet.guaranteed_hours,
+    guaranteedHoursReason: timesheet.guaranteed_hours_reason,
     guaranteedHoursNote: timesheet.guaranteed_hours_note,
     entries: (entryRows ?? []).map((row) => ({
       workDate: row.work_date,

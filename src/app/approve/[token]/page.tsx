@@ -47,7 +47,9 @@ export default async function ApprovePage({
 
   const { data: timesheet } = await admin
     .from("timesheets")
-    .select("id, status, week_start_date, week_end_date, traveler_id, guaranteed_hours_note, facilities(name)")
+    .select(
+      "id, status, week_start_date, week_end_date, traveler_id, guaranteed_hours, guaranteed_hours_reason, guaranteed_hours_note, facilities(name)",
+    )
     .eq("id", approvalToken.timesheet_id)
     .single();
 
@@ -83,7 +85,12 @@ export default async function ApprovePage({
         </p>
       </div>
 
-      <TimesheetSummary entries={entries ?? []} guaranteedHoursNote={timesheet.guaranteed_hours_note} />
+      <TimesheetSummary
+        entries={entries ?? []}
+        guaranteedHours={timesheet.guaranteed_hours}
+        guaranteedHoursReason={timesheet.guaranteed_hours_reason}
+        guaranteedHoursNote={timesheet.guaranteed_hours_note}
+      />
 
       <ApprovalForm token={token} />
     </div>

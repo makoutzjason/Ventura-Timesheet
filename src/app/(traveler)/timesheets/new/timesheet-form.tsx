@@ -6,8 +6,12 @@ import {
   calculateRegularHours,
   calculateOnCallHours,
   calculateCallBackHours,
+  calculateGuaranteedHoursTotal,
   needsLunchResolution,
+  needsGuaranteedHoursReason,
   SHORT_HOURS_REASON_LABELS,
+  GUARANTEED_HOURS_REASON_LABELS,
+  GUARANTEED_HOURS_QUALIFYING_REASONS,
 } from "@/lib/timesheets";
 import { parseDateOnly } from "@/lib/dates";
 import { PhotoUploadField, type UploadedPhoto } from "@/components/photo-upload-field";
@@ -38,6 +42,8 @@ export function TimesheetForm({
   days,
   initialEntries,
   initialGuaranteedHoursNote,
+  initialGuaranteedHoursReason,
+  guaranteedHours,
   weekStartDate,
   weekEndDate,
   timesheetId,
@@ -50,6 +56,8 @@ export function TimesheetForm({
   days: DayInfo[];
   initialEntries: DayEntry[];
   initialGuaranteedHoursNote: string;
+  initialGuaranteedHoursReason: string;
+  guaranteedHours: number | null;
   weekStartDate: string;
   weekEndDate: string;
   timesheetId: string | null;
@@ -61,10 +69,12 @@ export function TimesheetForm({
 }) {
   const [entries, setEntries] = useState(initialEntries);
   const [guaranteedHoursNote, setGuaranteedHoursNote] = useState(initialGuaranteedHoursNote);
+  const [guaranteedHoursReason, setGuaranteedHoursReason] = useState(initialGuaranteedHoursReason);
   const [photos, setPhotos] = useState(initialPhotos);
 
   const boundAction = saveTimesheetAction.bind(null, {
     facilityId,
+    guaranteedHours,
     weekStartDate,
     weekEndDate,
     workDates: days.map((day) => day.workDate),
@@ -99,6 +109,12 @@ export function TimesheetForm({
       return;
     }
 
+    if (shortfallNeedsReason && !guaranteedHoursReason) {
+      event.preventDefault();
+      setClientError("Select a reason for not meeting guaranteed hours before submitting.");
+      return;
+    }
+
     setClientError(null);
   }
 
@@ -113,6 +129,11 @@ export function TimesheetForm({
     return sum + (calculateCallBackHours(entry.callBackTimeIn, entry.callBackTimeOut) ?? 0);
   }, 0);
   const totalMileage = entries.reduce((sum, entry) => sum + (Number(entry.mileage) || 0), 0);
+  const guaranteedHoursTotal = calculateGuaranteedHoursTotal(entries);
+  const shortfallNeedsReason = needsGuaranteedHoursReason(guaranteedHours, guaranteedHoursTotal);
+  const notQualifyingReasons = Object.keys(GUARANTEED_HOURS_REASON_LABELS).filter(
+    (value) => !(GUARANTEED_HOURS_QUALIFYING_REASONS as readonly string[]).includes(value),
+  );
 
   return (
     <form action={formAction} className="space-y-5">
@@ -261,6 +282,22 @@ export function TimesheetForm({
         </div>
       </section>
 
+      {guaranteedHours !== null && (
+        <div
+          className={`rounded-lg border p-3 text-sm ${shortfallNeedsReason ? "border-amber-400 bg-amber-50" : "border-zinc-200 bg-white"}`}
+        >
+          <p className="text-zinc-900">
+            Guaranteed hours: <span className="font-medium">{guaranteedHours}</span> · Worked (incl. call-back):{" "}
+            <span className="font-medium">{Math.round(guaranteedHoursTotal * 100) / 100}</span>
+          </p>
+          {shortfallNeedsReason && (
+            <p className="mt-1 text-xs font-medium text-amber-700">
+              Required: select a reason below before submitting.
+            </p>
+          )}
+        </div>
+      )}
+
       <details className="rounded-lg border border-zinc-200 bg-white">
         <summary className="cursor-pointer px-3 py-3 text-sm font-semibold text-zinc-900">
           On-Call {totalOnCallHours > 0 && `(${Math.round(totalOnCallHours * 100) / 100} hrs)`}
@@ -393,16 +430,68 @@ export function TimesheetForm({
         </div>
       </details>
 
-      <label className="block text-sm font-medium text-zinc-700">
-        Explain if guaranteed hours are not met
-        <textarea
-          name="guaranteedHoursNote"
-          rows={2}
-          value={guaranteedHoursNote}
-          onChange={(event) => setGuaranteedHoursNote(event.target.value)}
-          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-        />
-      </label>
+      {shortfallNeedsReason ? (
+        <fieldset
+          className={`space-y-3 rounded-lg border bg-white p-3 ${!guaranteedHoursReason ? "border-amber-400" : "border-zinc-200"}`}
+        >
+          <legend className="px-1 text-sm font-semibold text-zinc-900">Guaranteed hours not met</legend>
+
+          <div>
+            <p className="text-xs font-medium text-zinc-700">Qualifies for guaranteed hours</p>
+            {GUARANTEED_HOURS_QUALIFYING_REASONS.map((value) => (
+              <label key={value} className="mt-1 flex items-center gap-2 text-sm text-zinc-900">
+                <input
+                  type="radio"
+                  name="guaranteedHoursReason"
+                  value={value}
+                  checked={guaranteedHoursReason === value}
+                  onChange={(event) => setGuaranteedHoursReason(event.target.value)}
+                />
+                {GUARANTEED_HOURS_REASON_LABELS[value]}
+              </label>
+            ))}
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-zinc-700">Does not qualify for guaranteed hours</p>
+            {notQualifyingReasons.map((value) => (
+              <label key={value} className="mt-1 flex items-center gap-2 text-sm text-zinc-900">
+                <input
+                  type="radio"
+                  name="guaranteedHoursReason"
+                  value={value}
+                  checked={guaranteedHoursReason === value}
+                  onChange={(event) => setGuaranteedHoursReason(event.target.value)}
+                />
+                {GUARANTEED_HOURS_REASON_LABELS[value]}
+              </label>
+            ))}
+          </div>
+
+          {!guaranteedHoursReason && (
+            <p className="text-xs font-medium text-amber-700">Required before submitting.</p>
+          )}
+
+          <label className="block text-sm font-medium text-zinc-700">
+            Optional note
+            <textarea
+              name="guaranteedHoursNote"
+              rows={2}
+              value={guaranteedHoursNote}
+              onChange={(event) => setGuaranteedHoursNote(event.target.value)}
+              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+            />
+          </label>
+        </fieldset>
+      ) : (
+        // Keep both fields present in the payload even when the picker is
+        // hidden, so a prior pick/note isn't silently dropped if hours are
+        // edited back up above the guarantee before saving.
+        <>
+          <input type="hidden" name="guaranteedHoursReason" value={guaranteedHoursReason} />
+          <input type="hidden" name="guaranteedHoursNote" value={guaranteedHoursNote} />
+        </>
+      )}
 
       {skipManagerApproval && (
         <section className="space-y-2">

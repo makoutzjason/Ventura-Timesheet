@@ -19,7 +19,9 @@ export default async function TimesheetDetailPage({
   // admin) — a stranger's id here just comes back empty, not someone else's data.
   const { data: timesheet, error: timesheetError } = await supabase
     .from("timesheets")
-    .select("id, week_start_date, week_end_date, status, flag_reason, guaranteed_hours_note, facilities(name)")
+    .select(
+      "id, week_start_date, week_end_date, status, flag_reason, guaranteed_hours, guaranteed_hours_reason, guaranteed_hours_note, facilities(name)",
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -91,7 +93,12 @@ export default async function TimesheetDetailPage({
         )}
       </div>
 
-      <TimesheetSummary entries={entries ?? []} guaranteedHoursNote={timesheet.guaranteed_hours_note} />
+      <TimesheetSummary
+        entries={entries ?? []}
+        guaranteedHours={timesheet.guaranteed_hours}
+        guaranteedHoursReason={timesheet.guaranteed_hours_reason}
+        guaranteedHoursNote={timesheet.guaranteed_hours_note}
+      />
 
       {photoReviewUrls && photoReviewUrls.length > 0 && (
         timesheet.status === "photo_submitted" ? (

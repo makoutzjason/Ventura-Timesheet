@@ -19,10 +19,15 @@ export async function inviteTravelerAction(_prevState: ActionState, formData: Fo
   const employeeId = String(formData.get("employeeId") ?? "").trim();
   const discipline = String(formData.get("discipline") ?? "").trim();
   const recruiterName = String(formData.get("recruiterName") ?? "").trim();
+  const guaranteedHoursRaw = String(formData.get("guaranteedHours") ?? "").trim();
+  const guaranteedHours = guaranteedHoursRaw ? Number(guaranteedHoursRaw) : null;
 
   if (!email) return { error: "Email is required." };
   if (!fullName) return { error: "Full name is required." };
   if (!facilityId) return { error: "Select a facility." };
+  if (guaranteedHours !== null && (Number.isNaN(guaranteedHours) || guaranteedHours < 0)) {
+    return { error: "Guaranteed hours must be a positive number." };
+  }
 
   const supabase = await createClient();
   const {
@@ -52,6 +57,7 @@ export async function inviteTravelerAction(_prevState: ActionState, formData: Fo
     employee_id: employeeId || null,
     discipline: discipline || null,
     recruiter_name: recruiterName || null,
+    guaranteed_hours: guaranteedHours,
   });
 
   if (travelerError) {
@@ -76,9 +82,14 @@ export async function updateTravelerAction(
   const discipline = String(formData.get("discipline") ?? "").trim();
   const recruiterName = String(formData.get("recruiterName") ?? "").trim();
   const active = formData.get("active") === "true";
+  const guaranteedHoursRaw = String(formData.get("guaranteedHours") ?? "").trim();
+  const guaranteedHours = guaranteedHoursRaw ? Number(guaranteedHoursRaw) : null;
 
   if (!fullName) return { error: "Full name is required." };
   if (!facilityId) return { error: "Select a facility." };
+  if (guaranteedHours !== null && (Number.isNaN(guaranteedHours) || guaranteedHours < 0)) {
+    return { error: "Guaranteed hours must be a positive number." };
+  }
 
   const supabase = await createClient();
 
@@ -95,6 +106,7 @@ export async function updateTravelerAction(
       employee_id: employeeId || null,
       discipline: discipline || null,
       recruiter_name: recruiterName || null,
+      guaranteed_hours: guaranteedHours,
       active,
     })
     .eq("id", travelerId);

@@ -20,7 +20,7 @@ export default async function NewTimesheetPage({
 
   const { data: traveler, error: travelerError } = await supabase
     .from("travelers")
-    .select("facility_id, facilities(name, week_start_day, time_zone, skip_manager_approval)")
+    .select("facility_id, guaranteed_hours, facilities(name, week_start_day, time_zone, skip_manager_approval)")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -52,12 +52,14 @@ export default async function NewTimesheetPage({
     status: string;
     flag_reason: string | null;
     guaranteed_hours_note: string | null;
+    guaranteed_hours_reason: string | null;
   } | null;
   // Display/behavior for whichever facility this timesheet actually belongs
   // to — see the branch below for why that isn't always traveler.facilities.
   let facilityName: string;
   let facilitySkipManagerApproval: boolean;
   let facilityIdForForm: string;
+  let guaranteedHoursForForm: number | null;
 
   if (requestedTimesheetId) {
     // Opening a *specific* timesheet to correct — e.g. a flagged one from a
@@ -71,7 +73,7 @@ export default async function NewTimesheetPage({
     const { data: requested } = await supabase
       .from("timesheets")
       .select(
-        "id, status, week_start_date, week_end_date, flag_reason, guaranteed_hours_note, facility_id, facilities(name, skip_manager_approval)",
+        "id, status, week_start_date, week_end_date, flag_reason, guaranteed_hours_note, guaranteed_hours_reason, guaranteed_hours, facility_id, facilities(name, skip_manager_approval)",
       )
       .eq("id", requestedTimesheetId)
       .eq("traveler_id", user.id)
@@ -97,6 +99,9 @@ export default async function NewTimesheetPage({
     facilityName = requestedFacility?.name ?? currentFacility.name;
     facilitySkipManagerApproval = requestedFacility?.skip_manager_approval ?? currentFacility.skip_manager_approval;
     facilityIdForForm = requested.facility_id;
+    // The timesheet's own snapshotted guaranteed_hours, same reasoning as
+    // facility_id above — not the traveler's current guarantee.
+    guaranteedHoursForForm = requested.guaranteed_hours;
   } else {
     const { weekStart, weekEnd, days: currentWeekDays } = getCurrentWeekRange(
       currentFacility.week_start_day,
@@ -108,10 +113,11 @@ export default async function NewTimesheetPage({
     facilityName = currentFacility.name;
     facilitySkipManagerApproval = currentFacility.skip_manager_approval;
     facilityIdForForm = traveler.facility_id;
+    guaranteedHoursForForm = traveler.guaranteed_hours;
 
     const { data: currentWeekTimesheet } = await supabase
       .from("timesheets")
-      .select("id, status, flag_reason, guaranteed_hours_note")
+      .select("id, status, flag_reason, guaranteed_hours_note, guaranteed_hours_reason")
       .eq("traveler_id", user.id)
       .eq("week_start_date", weekStartDate)
       .maybeSingle();
@@ -218,6 +224,8 @@ export default async function NewTimesheetPage({
         days={dayInfos}
         initialEntries={initialEntries}
         initialGuaranteedHoursNote={timesheet?.guaranteed_hours_note ?? ""}
+        initialGuaranteedHoursReason={timesheet?.guaranteed_hours_reason ?? ""}
+        guaranteedHours={guaranteedHoursForForm}
         weekStartDate={weekStartDate}
         weekEndDate={weekEndDate}
         timesheetId={timesheet?.id ?? null}

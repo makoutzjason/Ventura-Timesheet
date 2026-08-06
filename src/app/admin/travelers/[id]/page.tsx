@@ -8,7 +8,7 @@ export default async function EditTravelerPage({ params }: { params: Promise<{ i
 
   const { data: traveler } = await supabase
     .from("travelers")
-    .select("id, facility_id, employee_id, discipline, recruiter_name, active, profiles(full_name)")
+    .select("id, facility_id, employee_id, discipline, recruiter_name, guaranteed_hours, active, profiles(full_name)")
     .eq("id", id)
     .maybeSingle();
 
@@ -30,6 +30,7 @@ export default async function EditTravelerPage({ params }: { params: Promise<{ i
           employeeId: traveler.employee_id ?? "",
           discipline: traveler.discipline ?? "",
           recruiterName: traveler.recruiter_name ?? "",
+          guaranteedHours: traveler.guaranteed_hours != null ? String(traveler.guaranteed_hours) : "",
           active: traveler.active,
         }}
       />

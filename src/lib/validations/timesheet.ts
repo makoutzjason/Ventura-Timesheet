@@ -5,6 +5,18 @@ const timeOrEmpty = z.union([z.string().regex(TIME_PATTERN), z.literal("")]);
 
 export const SHORT_HOURS_REASONS = ["cancelled", "volunteered_to_leave", "sick", "personal"] as const;
 
+// Week-level "CHECK ONE" reason for not meeting guaranteed hours. Unlike
+// SHORT_HOURS_REASONS (per day), this applies once per timesheet, and the
+// value itself encodes qualification — see GUARANTEED_HOURS_QUALIFYING_REASONS
+// in src/lib/timesheets.ts.
+export const GUARANTEED_HOURS_REASONS = [
+  "low_census",
+  "sick",
+  "facility_closed",
+  "personal_time_off",
+  "volunteered_to_leave",
+] as const;
+
 // Mirrors the paper form's four sections for a single day: Regular Hours
 // (with its Lunch-Out/Lunch-In/"NO Lunch"/short-hours-reason/comments),
 // On-Call, Call-Back, and Mileage.
@@ -49,6 +61,7 @@ export const dayEntrySchema = z
 export const timesheetSubmissionSchema = z.object({
   days: z.array(dayEntrySchema).length(7),
   guaranteedHoursNote: z.string().max(1000),
+  guaranteedHoursReason: z.union([z.enum(GUARANTEED_HOURS_REASONS), z.literal("")]),
 });
 
 export type DayEntryInput = z.infer<typeof dayEntrySchema>;

@@ -9,6 +9,7 @@ export type TravelerEditValues = {
   employeeId: string;
   discipline: string;
   recruiterName: string;
+  guaranteedHours: string;
   active: boolean;
 };
 
@@ -82,6 +83,19 @@ export function EditTravelerForm({
           type="text"
           name="recruiterName"
           defaultValue={initialValues.recruiterName}
+          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+        />
+      </label>
+
+      <label className="block text-sm font-medium text-zinc-700">
+        Guaranteed hours per week
+        <input
+          type="number"
+          name="guaranteedHours"
+          min="0"
+          step="0.25"
+          defaultValue={initialValues.guaranteedHours}
+          placeholder="Leave blank for none (e.g. PRN)"
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
         />
       </label>

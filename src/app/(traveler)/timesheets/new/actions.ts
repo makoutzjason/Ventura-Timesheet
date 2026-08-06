@@ -9,10 +9,11 @@ import { timesheetSubmissionSchema } from "@/lib/validations/timesheet";
 import { generateApprovalToken } from "@/lib/tokens";
 import { sendApprovalRequestEmail } from "@/lib/email/send-approval-request";
 import { formatWeekLabel, parseDateOnly } from "@/lib/dates";
-import { needsLunchResolution } from "@/lib/timesheets";
+import { needsLunchResolution, needsGuaranteedHoursReason, calculateGuaranteedHoursTotal } from "@/lib/timesheets";
 
 type WeekContext = {
   facilityId: string;
+  guaranteedHours: number | null;
   weekStartDate: string;
   weekEndDate: string;
   workDates: string[];
@@ -54,6 +55,7 @@ export async function saveTimesheetAction(
   const parsed = timesheetSubmissionSchema.safeParse({
     days: rawDays,
     guaranteedHoursNote: String(formData.get("guaranteedHoursNote") ?? ""),
+    guaranteedHoursReason: String(formData.get("guaranteedHoursReason") ?? ""),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Please check the highlighted fields." };
@@ -82,7 +84,11 @@ export async function saveTimesheetAction(
 
     const { error: updateError } = await supabase
       .from("timesheets")
-      .update({ status: "draft", guaranteed_hours_note: parsed.data.guaranteedHoursNote || null })
+      .update({
+        status: "draft",
+        guaranteed_hours_note: parsed.data.guaranteedHoursNote || null,
+        guaranteed_hours_reason: parsed.data.guaranteedHoursReason || null,
+      })
       .eq("id", timesheetId);
     if (updateError) return { error: updateError.message };
   } else {
@@ -91,10 +97,12 @@ export async function saveTimesheetAction(
       .insert({
         traveler_id: user.id,
         facility_id: context.facilityId,
+        guaranteed_hours: context.guaranteedHours,
         week_start_date: context.weekStartDate,
         week_end_date: context.weekEndDate,
         status: "draft",
         guaranteed_hours_note: parsed.data.guaranteedHoursNote || null,
+        guaranteed_hours_reason: parsed.data.guaranteedHoursReason || null,
       })
       .select("id")
       .single();
@@ -146,6 +154,11 @@ export async function saveTimesheetAction(
     if (unresolvedDays.length > 0) {
       const dayLabels = unresolvedDays.map((day) => format(parseDateOnly(day.workDate), "EEE, MMM d")).join("; ");
       return { error: `Enter lunch times or check "No lunch" before submitting for: ${dayLabels}.` };
+    }
+
+    const totalHours = calculateGuaranteedHoursTotal(parsed.data.days);
+    if (needsGuaranteedHoursReason(context.guaranteedHours, totalHours) && !parsed.data.guaranteedHoursReason) {
+      return { error: "Select a reason for not meeting guaranteed hours before submitting." };
     }
   }
 

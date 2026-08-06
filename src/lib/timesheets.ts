@@ -90,3 +90,54 @@ export function calculateOnCallHours(timeIn: string, timeOut: string): number | 
 export function calculateCallBackHours(timeIn: string, timeOut: string): number | null {
   return calculateOnCallHours(timeIn, timeOut);
 }
+
+type RegularHoursEntry = {
+  timeIn: string;
+  timeOut: string;
+  lunchOut: string;
+  lunchIn: string;
+  noLunch: boolean;
+};
+
+type CallBackHoursEntry = {
+  callBackTimeIn: string;
+  callBackTimeOut: string;
+};
+
+export function calculateTotalRegularHours(entries: RegularHoursEntry[]): number {
+  return entries.reduce(
+    (sum, e) => sum + (calculateRegularHours(e.timeIn, e.timeOut, e.lunchOut, e.lunchIn, e.noLunch) ?? 0),
+    0,
+  );
+}
+
+export function calculateTotalCallBackHours(entries: CallBackHoursEntry[]): number {
+  return entries.reduce((sum, e) => sum + (calculateCallBackHours(e.callBackTimeIn, e.callBackTimeOut) ?? 0), 0);
+}
+
+// What counts toward a guaranteed-hours week: regular worked hours plus
+// call-back hours (time actually called in and worked). On-call/standby
+// time is excluded — the traveler isn't actively working during it.
+export function calculateGuaranteedHoursTotal(entries: (RegularHoursEntry & CallBackHoursEntry)[]): number {
+  return calculateTotalRegularHours(entries) + calculateTotalCallBackHours(entries);
+}
+
+export const GUARANTEED_HOURS_REASON_LABELS: Record<string, string> = {
+  low_census: "Low census",
+  sick: "Sick",
+  facility_closed: "Facility closed (e.g. holiday)",
+  personal_time_off: "Personal time off",
+  volunteered_to_leave: "Volunteered to leave early",
+};
+
+// The one reason that still qualifies for guaranteed-hours pay despite
+// falling short — facility-driven, as opposed to the other (traveler-driven)
+// reasons.
+export const GUARANTEED_HOURS_QUALIFYING_REASONS = ["low_census"] as const;
+
+// A guarantee only needs a reason picked if one applies (non-null) and the
+// traveler's worked+call-back hours came in under it. No guarantee (PRN,
+// etc.) or meeting/exceeding it means nothing to explain.
+export function needsGuaranteedHoursReason(guaranteedHours: number | null, totalHours: number) {
+  return guaranteedHours !== null && totalHours < guaranteedHours;
+}

@@ -50,6 +50,18 @@ export function InviteTravelerForm({ facilities }: { facilities: { id: string; n
         <input type="text" name="recruiterName" className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" />
       </label>
 
+      <label className="block text-sm font-medium text-zinc-700">
+        Guaranteed hours per week
+        <input
+          type="number"
+          name="guaranteedHours"
+          min="0"
+          step="0.25"
+          placeholder="Leave blank for none (e.g. PRN)"
+          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+        />
+      </label>
+
       <button
         type="submit"
         disabled={pending}

@@ -3,6 +3,7 @@ import {
   calculateOnCallHours,
   calculateCallBackHours,
   SHORT_HOURS_REASON_LABELS,
+  GUARANTEED_HOURS_REASON_LABELS,
 } from "@/lib/timesheets";
 
 export type TimesheetEntryRow = {
@@ -31,9 +32,13 @@ function trim(value: string | null) {
 // same thing, so this is the one place that logic lives.
 export function TimesheetSummary({
   entries,
+  guaranteedHours,
+  guaranteedHoursReason,
   guaranteedHoursNote,
 }: {
   entries: TimesheetEntryRow[];
+  guaranteedHours: number | null;
+  guaranteedHoursReason: string | null;
   guaranteedHoursNote: string | null;
 }) {
   const totalRegularHours = entries.reduce(
@@ -160,10 +165,19 @@ export function TimesheetSummary({
         </section>
       )}
 
-      {guaranteedHoursNote && (
+      {(guaranteedHours !== null || guaranteedHoursNote) && (
         <section className="rounded-lg border border-zinc-200 bg-white p-3">
-          <h2 className="text-sm font-semibold text-zinc-900">Guaranteed hours note</h2>
-          <p className="mt-1 text-sm text-zinc-600">{guaranteedHoursNote}</p>
+          <h2 className="text-sm font-semibold text-zinc-900">Guaranteed hours</h2>
+          {guaranteedHours !== null && (
+            <p className="mt-1 text-sm text-zinc-600">
+              Guaranteed: {guaranteedHours} · Worked (incl. call-back):{" "}
+              {Math.round((totalRegularHours + totalCallBackHours) * 100) / 100}
+              {guaranteedHoursReason && (
+                <> · Reason: {GUARANTEED_HOURS_REASON_LABELS[guaranteedHoursReason] ?? guaranteedHoursReason}</>
+              )}
+            </p>
+          )}
+          {guaranteedHoursNote && <p className="mt-1 text-sm text-zinc-600">{guaranteedHoursNote}</p>}
         </section>
       )}
     </div>
